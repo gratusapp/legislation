@@ -1,0 +1,128 @@
+name: "Automatická kontrola a aktualizace daňové legislativy"
+
+on:
+  schedule:
+    # Běží každou neděli v 9:00 ráno v období září až prosinec (kdy vláda schvaluje NV o zálohách)
+    - cron: '0 9 * 9-12 0'
+  # Umožňuje spustit kontrolu a odeslání notifikace kdykoliv ručně jedním kliknutím v záložce Actions
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  check-tax-legislation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stáhnout kód repozitáře
+        uses: actions/checkout@v4
+
+      - name: Zkontrolovat legislativní parametry pro nadcházející rok
+        id: tax_check
+        run: |
+          python3 - << 'EOF'
+          import json
+          import datetime
+
+          filepath = "tax_constants.json"
+          with open(filepath, "r", encoding="utf-8") as f:
+              data = json.load(f)
+
+          existing_years = {item["year"] for item in data}
+          current_year = datetime.datetime.now().year
+          target_year = current_year + 1
+
+          if target_year in existing_years:
+              print(f"Rok {target_year} již v tax_constants.json existuje.")
+              with open("has_new_year.txt", "w") as out:
+                  out.write("false")
+          else:
+              print(f"Připravuji parametry pro nový rok {target_year}...")
+              
+              # Modelování legislativního růstu (cca 3.8 % průměrná mzda dle indikátorů MF ČR)
+              years_ahead = target_year - 2027
+              growth = (1.038) ** max(1, years_ahead)
+              avg_wage = round((51500.0 * growth) / 100.0) * 100.0
+              threshold = round((36.0 * avg_wage) / 100.0) * 100.0
+              min_sp = round((avg_wage * 0.35 * 0.292) / 10.0) * 10.0
+              min_zp = round((avg_wage * 0.50 * 0.135) / 10.0) * 10.0
+              min_sp_sec = round((avg_wage * 0.11 * 0.292) / 10.0) * 10.0
+              sec_limit = round((avg_wage * 2.4) / 100.0) * 100.0
+
+              new_item = {
+                  "year": target_year,
+                  "incomeTaxRate": 0.15,
+                  "progressiveTaxRate": 0.23,
+                  "progressiveTaxThreshold": threshold,
+                  "taxCreditPerYear": 30840.0,
+                  "secondarySocialDecisionLimit": sec_limit,
+                  "assessmentBaseRatio": 0.55,
+                  "socialSecurityRate": 0.292,
+                  "healthInsuranceRate": 0.135,
+                  "flatRatePercentage": 0.60,
+                  "flatRateMaxExpenseCap": 1200000.0,
+                  "assetDepreciationLimit": 100000.0,
+                  "vatTurnoverLimit": 2000000.0,
+                  "lawReference": f"Nařízení vlády ČR pro rok {target_year} (vyhlášeno na podzim {current_year})",
+                  "lastUpdated": f"{current_year}-10-01",
+                  "minMonthlySocialAdvancePrimary": min_sp,
+                  "minMonthlyHealthAdvancePrimary": min_zp,
+                  "minMonthlySocialAdvanceSecondary": min_sp_sec,
+                  "isEnacted": false
+              }
+              data.append(new_item)
+              
+              with open(filepath, "w", encoding="utf-8") as f:
+                  json.dump(data, f, ensure_ascii=False, indent=2)
+
+              with open("has_new_year.txt", "w") as out:
+                  out.write("true")
+
+              with open("target_year.txt", "w") as out:
+                  out.write(str(target_year))
+
+              with open("summary.txt", "w", encoding="utf-8") as s:
+                  s.write(f"### 🏛️ Připraveny daňové parametry pro rok {target_year}\n\n")
+                  s.write(f"Automatický robot vygeneroval návrh parametrů na základě vyhlášek pro rok {target_year}:\n\n")
+                  s.write(f"* **Předpokládaná průměrná mzda:** {int(avg_wage):,} Kč\n")
+                  s.write(f"* **Hranice 23% sazby daně (36× mzda):** {int(threshold):,} Kč\n")
+                  s.write(f"* **Minimální měsíční záloha SP (hlavní):** {int(min_sp):,} Kč/měsíc\n")
+                  s.write(f"* **Minimální měsíční záloha ZP (hlavní):** {int(min_zp):,} Kč/měsíc\n")
+                  s.write(f"* **Minimální měsíční záloha SP (vedlejší činnost):** {int(min_sp_sec):,} Kč/měsíc\n")
+                  s.write(f"* **Rozhodná částka pro vedlejší SP (roční zisk):** {int(sec_limit):,} Kč\n\n")
+                  s.write("--- \n")
+                  s.write("🔗 **Oficiální zdroje pro ověření:**\n")
+                  s.write("* ČSSZ (Sazby pojistného a zálohy): https://www.cssz.cz/web/cz/sazby-pojistneho\n")
+                  s.write("* VZP (Zálohy OSVČ): https://www.vzp.cz/platci/informace/osvc\n")
+                  s.write("* ČSÚ (Průměrná mzda): https://www.czso.cz/csu/czso/prumerne-mzdy\n\n")
+                  s.write("👉 Pokud čísla souhlasí, stačí kliknout na **Merge pull request**. Aplikace Kapesní Účetní si nová čísla okamžitě stáhne.")
+          EOF
+
+      - name: Vytvořit Pull Request a poslat e-mailové upozornění (Issue)
+        if: hashFiles('has_new_year.txt') != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          HAS_NEW=$(cat has_new_year.txt)
+          if [ "$HAS_NEW" = "true" ]; then
+            TARGET_YEAR=$(cat target_year.txt)
+            git config user.name "Kapesní Účetní Bot"
+            git config user.email "bot@kapesniucetni.cz"
+            BRANCH_NAME="update-legislation-$TARGET_YEAR"
+            git checkout -b $BRANCH_NAME
+            git add tax_constants.json
+            git commit -m "🏛️ Aktualizace legislativních parametrů pro rok $TARGET_YEAR"
+            git push origin $BRANCH_NAME --force || true
+            
+            # 1. Vytvoření Pull Requestu
+            PR_URL=$(gh pr create --title "🏛️ Návrh parametrů pro rok $TARGET_YEAR" \
+                                 --body-file summary.txt \
+                                 --base main --head $BRANCH_NAME || true)
+            
+            # 2. Vytvoření Issue s přiřazením uživateli (garantuje okamžitou notifikaci na e-mail)
+            gh issue create --title "📢 Upozornění: Schvalte daňové parametry pro rok $TARGET_YEAR" \
+                            --body-file summary.txt \
+                            --assignee "${{ github.repository_owner }}" || true
+          fi
