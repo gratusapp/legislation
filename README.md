@@ -11,10 +11,10 @@ Tento repozitář slouží jako centrální feed daňových a legislativních pa
 
 ## 🤖 Automatická měsíční kontrola a připomínky (GitHub Actions)
 
-* Každý měsíc (15. dne v měsíci) běží workflow [update_tax_legislation.yml](.github/workflows/update_tax_legislation.yml):
-  1. Udržuje repozitář aktivní lehkou měsíční kontrolou (*keep-alive*), aby GitHub po 60 dnech automaticky nevypnul plánované spouštění.
+* Kontrolní workflow [update_tax_legislation.yml](.github/workflows/update_tax_legislation.yml) běží **každou neděli**:
+  1. Pokud je poslední commit starší než **35 dní**, provede lehký udržovací commit (*keep-alive*), aby GitHub po 60 dnech nevypnul plánované spouštění (rezerva ~25 dní proti výpadku).
   2. Jakmile od září chybí schválené hodnoty pro nadcházející rok (`"isEnacted": true`), robot připraví **Pull Request** s předběžným výpočtem a orientačním náhledem z ČSSZ/VZP.
-  3. Zároveň založí **Issue** přiřazené vlastníkovi repozitáře (**pošle e-mail**) a každý měsíc do něj přidá připomínku, dokud parametry nepotvrdíte a nesloučíte do `main`.
+  3. Zároveň založí **Issue** přiřazené vlastníkovi repozitáře (**pošle e-mail**) a **1× za ~25–30 dní** do něj přidá měsíční připomínku, dokud parametry nepotvrdíte a nesloučíte do `main`.
 * V e-mailu stačí kliknout na odkaz, ověřit oficiální částky z vyhlášky, nastavit `"isEnacted": true`, upravit `lastUpdated` na aktuální datum a potvrdit **Merge pull request** (a zavřít Issue).
 
 ## ✏️ Jak upravit parametry ručně
