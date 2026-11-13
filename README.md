@@ -4,23 +4,22 @@ Tento repozitář slouží jako centrální feed daňových a legislativních pa
 
 ## 📡 Jak to funguje
 
-1. Aplikace při startu na pozadí stahuje soubor:
+1. Aplikace při startu a návratu do popředí na pozadí stahuje soubor:
    `https://raw.githubusercontent.com/gratusapp/legislation/main/tax_constants.json`
-2. Pokud v něm najde novější parametry pro daný rok (např. nové minimální zálohy SP a ZP, rozhodnou částku pro vedlejší činnost nebo hranici 23% sazby daně), okamžitě začne počítat podle nových zákonů.
+2. Pokud v něm najde novější parametry pro daný rok (např. nové minimální zálohy SP a ZP, rozhodnou částku pro vedlejší činnost, paušální daň nebo hranici 23% sazby daně), okamžitě je uloží i pro offline provoz a začne podle nich počítat.
 3. **Není nutné vydávat novou verzi aplikace na App Store.**
 
-## 🤖 Automatická kontrola a e-mailová upozornění (GitHub Actions)
+## 🤖 Automatická měsíční kontrola a připomínky (GitHub Actions)
 
-* Každý podzim běží automatický skript [update_tax_legislation.yml](.github/workflows/update_tax_legislation.yml).
-* Pokud v souboru chybí parametry pro nadcházející rok, robot:
-  1. Spočítá odhadované zákonné limity dle vládních vyhlášek.
-  2. Vytvoří Pull Request.
-  3. Založí Issue a přiřadí ho vám, což **automaticky odešle e-mail na váš účet**.
-* V e-mailu stačí kliknout na odkaz, zkontrolovat čísla a jedním kliknutím potvrdit (**Merge pull request**).
+* Každý měsíc (15. dne v měsíci) běží workflow [update_tax_legislation.yml](.github/workflows/update_tax_legislation.yml):
+  1. Udržuje repozitář aktivní lehkou měsíční kontrolou (*keep-alive*), aby GitHub po 60 dnech automaticky nevypnul plánované spouštění.
+  2. Jakmile od září chybí schválené hodnoty pro nadcházející rok (`"isEnacted": true`), robot připraví **Pull Request** s předběžným výpočtem a orientačním náhledem z ČSSZ/VZP.
+  3. Zároveň založí **Issue** přiřazené vlastníkovi repozitáře (**pošle e-mail**) a každý měsíc do něj přidá připomínku, dokud parametry nepotvrdíte a nesloučíte do `main`.
+* V e-mailu stačí kliknout na odkaz, ověřit oficiální částky z vyhlášky, nastavit `"isEnacted": true`, upravit `lastUpdated` na aktuální datum a potvrdit **Merge pull request** (a zavřít Issue).
 
 ## ✏️ Jak upravit parametry ručně
 
 1. Otevřete soubor [tax_constants.json](tax_constants.json).
 2. Klikněte na ikonu ✏️ **Edit**.
-3. Upravte hodnoty pro daný rok a klikněte na **Commit changes**.
-4. Všichni uživatelé aplikace získají nová čísla při příštím spuštění aplikace.
+3. Upravte hodnoty pro daný rok, nastavte aktuální `lastUpdated` (formát `YYYY-MM-DD`) a `"isEnacted": true`, poté klikněte na **Commit changes**.
+4. Aplikace si nová čísla stáhne automaticky při dalším spuštění (do ~5 minut od commitu).
