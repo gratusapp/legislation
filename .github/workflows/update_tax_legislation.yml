@@ -25,6 +25,7 @@ jobs:
           python3 - << 'EOF'
           import json
           import datetime
+          import math
 
           filepath = "tax_constants.json"
           with open(filepath, "r", encoding="utf-8") as f:
@@ -41,15 +42,16 @@ jobs:
           else:
               print(f"Připravuji parametry pro nový rok {target_year}...")
               
-              # Modelování legislativního růstu (cca 3.8 % průměrná mzda dle indikátorů MF ČR)
+              # Modelování legislativního růstu (3.8 % průměrná mzda dle MF ČR, základ NV č. 177/2026 Sb. = 51 663 Kč v roce 2027)
               years_ahead = target_year - 2027
               growth = (1.038) ** max(1, years_ahead)
-              avg_wage = round((51500.0 * growth) / 100.0) * 100.0
+              avg_wage = round((51663.0 * growth) / 100.0) * 100.0
               threshold = round((36.0 * avg_wage) / 100.0) * 100.0
               min_sp = round((avg_wage * 0.35 * 0.292) / 10.0) * 10.0
               min_zp = round((avg_wage * 0.50 * 0.135) / 10.0) * 10.0
               min_sp_sec = round((avg_wage * 0.11 * 0.292) / 10.0) * 10.0
               sec_limit = round((avg_wage * 2.4) / 100.0) * 100.0
+              flat_tier1 = 100.0 + math.ceil(avg_wage * 0.35 * 1.15 * 0.292) + math.ceil(avg_wage * 0.50 * 0.135)
 
               new_item = {
                   "year": target_year,
@@ -63,14 +65,17 @@ jobs:
                   "healthInsuranceRate": 0.135,
                   "flatRatePercentage": 0.60,
                   "flatRateMaxExpenseCap": 1200000.0,
-                  "assetDepreciationLimit": 100000.0,
+                  "assetDepreciationLimit": 80000.0,
                   "vatTurnoverLimit": 2000000.0,
-                  "lawReference": f"Nařízení vlády ČR pro rok {target_year} (vyhlášeno na podzim {current_year})",
+                  "lawReference": f"Předběžná projekce pro rok {target_year} — ověřte s vyhlášeným NV ČR",
                   "lastUpdated": f"{current_year}-10-01",
                   "minMonthlySocialAdvancePrimary": min_sp,
                   "minMonthlyHealthAdvancePrimary": min_zp,
                   "minMonthlySocialAdvanceSecondary": min_sp_sec,
-                  "isEnacted": false
+                  "flatTaxTier1Monthly": flat_tier1,
+                  "flatTaxTier2Monthly": 16745.0,
+                  "flatTaxTier3Monthly": 27139.0,
+                  "isEnacted": False
               }
               data.append(new_item)
               
@@ -91,6 +96,7 @@ jobs:
                   s.write(f"* **Minimální měsíční záloha SP (hlavní):** {int(min_sp):,} Kč/měsíc\n")
                   s.write(f"* **Minimální měsíční záloha ZP (hlavní):** {int(min_zp):,} Kč/měsíc\n")
                   s.write(f"* **Minimální měsíční záloha SP (vedlejší činnost):** {int(min_sp_sec):,} Kč/měsíc\n")
+                  s.write(f"* **Paušální daň 1. pásmo:** {int(flat_tier1):,} Kč/měsíc\n")
                   s.write(f"* **Rozhodná částka pro vedlejší SP (roční zisk):** {int(sec_limit):,} Kč\n\n")
                   s.write("--- \n")
                   s.write("🔗 **Oficiální zdroje pro ověření:**\n")
