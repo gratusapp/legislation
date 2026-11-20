@@ -2,7 +2,7 @@ name: "Automatická kontrola a měsíční připomínka daňové legislativy"
 
 on:
   schedule:
-    # Běží každou neděli v 9:00 UTC (rezerva pro keep-alive proti případnému vynechání běhu; keep-alive zapisuje až po 35 dnech a e-mail chodí max 1× měsíčně)
+    # Běží každou neděli v 9:00 UTC (keep-alive zapisuje po 28 dnech -> 4-5 pojistných nedělí před 60denním limitem GitHubu)
     - cron: '0 9 * * 0'
   # Umožňuje spustit kontrolu a test připomínky kdykoliv ručně jedním kliknutím v záložce Actions
   workflow_dispatch:
@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Stáhnout kód repozitáře
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 10
 
@@ -28,10 +28,12 @@ jobs:
           NOW_TS=$(date +%s)
           AGE_DAYS=$(( (NOW_TS - LAST_COMMIT_TS) / 86400 ))
           echo "Stáří posledního commitu na main: ${AGE_DAYS} dní"
-          if [ "$AGE_DAYS" -ge 35 ]; then
+          if [ "$AGE_DAYS" -ge 28 ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit --allow-empty -m "chore: měsíční kontrola legislativy (keep-alive)"
+            date -u +"%Y-%m-%dT%H:%M:%SZ" > .github/keepalive.txt
+            git add .github/keepalive.txt
+            git commit -m "chore: měsíční keep-alive legislativy [skip ci]"
             git push origin HEAD:main
           fi
 
@@ -88,12 +90,16 @@ jobs:
               years_ahead = target_year - 2027
               growth = (1.038) ** max(1, years_ahead)
               avg_wage = round((51663.0 * growth) / 100.0) * 100.0
-              threshold = round((36.0 * avg_wage) / 100.0) * 100.0
-              min_sp = round((avg_wage * 0.35 * 0.292) / 10.0) * 10.0
-              min_zp = round((avg_wage * 0.50 * 0.135) / 10.0) * 10.0
-              min_sp_sec = round((avg_wage * 0.11 * 0.292) / 10.0) * 10.0
-              sec_limit = round((avg_wage * 2.4) / 100.0) * 100.0
-              flat_tier1 = 100.0 + math.ceil(avg_wage * 0.35 * 1.15 * 0.292) + math.ceil(avg_wage * 0.50 * 0.135)
+              threshold = float(math.ceil(36.0 * avg_wage))
+              # Zákonné zaokrouhlování vyměřovacích základů a záloh na celé koruny nahoru (ČSSZ / VZP)
+              min_vz_sp_primary = float(math.ceil(avg_wage * 0.35))
+              min_sp = float(math.ceil(min_vz_sp_primary * 0.292))
+              min_vz_zp_primary = float(math.ceil(avg_wage * 0.50))
+              min_zp = float(math.ceil(min_vz_zp_primary * 0.135))
+              min_vz_sp_sec = float(math.ceil(avg_wage * 0.11))
+              min_sp_sec = float(math.ceil(min_vz_sp_sec * 0.292))
+              sec_limit = float(math.ceil(avg_wage * 2.4))
+              flat_tier1 = 100.0 + float(math.ceil(min_sp * 1.15)) + min_zp
 
               if existing is None:
                   print(f"Připravuji návrh parametrů pro rok {target_year}...")
@@ -122,6 +128,7 @@ jobs:
                       "isEnacted": False
                   }
                   data.append(new_item)
+                  data.sort(key=lambda item: item["year"])
                   with open(filepath, "w", encoding="utf-8") as f:
                       json.dump(data, f, ensure_ascii=False, indent=2)
                       f.write("\n")
